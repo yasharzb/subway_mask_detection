@@ -14,6 +14,8 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -28,7 +30,8 @@ public class Scanner {
     private HttpRequest httpRequest;
     private static final Logger LOGGER = Logger.getLogger(Scanner.class.getName());
     private ScheduledExecutorService scheduler;
-    private static final String TIME_SP = "-";
+    private static final String DATE_SP = "-";
+    private static final String TIME_SP = ":";
 
     public static Scanner getInstance() {
         SCANNER.mainConfig = MainConfig.getInstance();
@@ -52,20 +55,22 @@ public class Scanner {
         httpRequest = HttpRequest.newBuilder().uri(URI.create(mainConfig.getCamTakeUri())).build();
         LocalDateTime time = LocalDateTime.now();
         String path = new StringBuilder(mainConfig.getPref())
-                .append(time.getYear()).append(TIME_SP)
-                .append(time.getMonth()).append(TIME_SP)
-                .append(time.getDayOfMonth()).append(TIME_SP)
+                .append(time.getYear()).append(DATE_SP)
+                .append(time.getMonth()).append(DATE_SP)
+                .append(time.getDayOfMonth()).append(DATE_SP)
                 .append(time.getHour()).append(TIME_SP)
                 .append(time.getMinute()).append(TIME_SP)
-                .append(time.getSecond()).append(TIME_SP)
+                .append(time.getSecond())
                 .append(mainConfig.getSuf())
                 .toString();
         File imgFile = new File(path);
         try {
             client.send(httpRequest, HttpResponse.BodyHandlers.ofFile(Path.of(imgFile.getAbsolutePath())));
             LOGGER.info("Taken");
-            if (!isOK(path))
+            if (!isOK(path)) {
+                LOGGER.warning("Not appropriate");
                 sendFile(imgFile);
+            }
         } catch (IOException | InterruptedException e) {
             LOGGER.log(Level.SEVERE, "Taking picture failed");
         }
@@ -93,8 +98,12 @@ public class Scanner {
     }
 
     private boolean isOK(String file) {
-//        String result = PythonUtil.runPython(mainConfig.getPyFile(), file);
-//        return Boolean.parseBoolean(result);
-        return false;
+        Optional<List<String>> results = PythonUtil.runPython(mainConfig.getPyFile(), file);
+        if (results.isPresent()) {
+            return Boolean.parseBoolean(results.get().get(0));
+        } else {
+            LOGGER.warning("process failed");
+            return true;
+        }
     }
 }
