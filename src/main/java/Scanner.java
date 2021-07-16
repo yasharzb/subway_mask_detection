@@ -1,11 +1,17 @@
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 import org.apache.http.HttpEntity;
+import org.apache.http.HttpStatus;
+import org.apache.http.StatusLine;
+import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.mime.MultipartEntityBuilder;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
+import org.apache.http.util.EntityUtils;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
@@ -13,6 +19,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Path;
+import java.rmi.ServerException;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -67,16 +74,19 @@ public class Scanner {
         try {
             client.send(httpRequest, HttpResponse.BodyHandlers.ofFile(Path.of(imgFile.getAbsolutePath())));
             LOGGER.info("Taken");
-            if (!isOK(path)) {
+            if (!sendFile(imgFile)) {
                 LOGGER.warning("Not appropriate");
-                sendFile(imgFile);
+                handleMotorAndBuzzer("False");
+            } else {
+                LOGGER.warning("Appropriate");
+                handleMotorAndBuzzer("True");
             }
         } catch (IOException | InterruptedException e) {
             LOGGER.log(Level.SEVERE, "Taking picture failed");
         }
     }
 
-    private void sendFile(File file) {
+    private boolean sendFile(File file) {
         URI startUploadUri = URI.create(mainConfig.getStartUploadUri() + file.getName());
         URI fileUploadUri = URI.create(mainConfig.getFileUploadUri());
         httpRequest = HttpRequest.newBuilder().uri(startUploadUri).GET().build();
@@ -87,24 +97,30 @@ public class Scanner {
             HttpPost httpPost = new HttpPost(fileUploadUri);
             httpPost.setEntity(entity);
             try {
-                closeableHttpClient.execute(httpPost);
-                LOGGER.info("Upload successful");
+                CloseableHttpResponse response = closeableHttpClient.execute(httpPost);
+                if (response.getStatusLine().getStatusCode() == HttpStatus.SC_OK) {
+                    LOGGER.info("Upload successful");
+                    String result = EntityUtils.toString(response.getEntity());
+                    return Boolean.parseBoolean(result);
+                } else {
+                    LOGGER.log(Level.SEVERE, "Server not available");
+                }
             } catch (IOException e) {
                 LOGGER.log(Level.SEVERE, "Failed to upload the file");
             }
         } catch (IOException | InterruptedException e) {
             LOGGER.log(Level.SEVERE, "Starting upload failed");
         }
+        return true;
     }
 
-    private boolean isOK(String file) {
-        Optional<List<String>> results = PythonUtil.runPython(mainConfig.getPyFile(), file);
+    private void handleMotorAndBuzzer(String mode) {
+        Optional<List<String>> results = PythonUtil.runPython(mainConfig.getPyFile(), mode);
         if (results.isPresent()) {
             List<String> stringResults = results.get();
-            return Boolean.parseBoolean(stringResults.get(stringResults.size() - 1));
+            LOGGER.info(stringResults.get(stringResults.size() - 1));
         } else {
             LOGGER.warning("process failed");
-            return true;
         }
     }
 }
