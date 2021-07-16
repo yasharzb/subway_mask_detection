@@ -11,7 +11,7 @@ import java.util.stream.Collectors;
 public final class PythonUtil {
     public static Optional<List<String>> runPython(String pythonFile, String... args) {
         List<String> commandAndArgs = new ArrayList<>();
-        commandAndArgs.add("python");
+        commandAndArgs.add("python3");
         commandAndArgs.add(pythonFile);
         commandAndArgs.addAll(Arrays.asList(args));
         ProcessBuilder processBuilder = new ProcessBuilder(commandAndArgs);

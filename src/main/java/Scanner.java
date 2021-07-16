@@ -100,7 +100,8 @@ public class Scanner {
     private boolean isOK(String file) {
         Optional<List<String>> results = PythonUtil.runPython(mainConfig.getPyFile(), file);
         if (results.isPresent()) {
-            return Boolean.parseBoolean(results.get().get(0));
+            List<String> stringResults = results.get();
+            return Boolean.parseBoolean(stringResults.get(stringResults.size() - 1));
         } else {
             LOGGER.warning("process failed");
             return true;
